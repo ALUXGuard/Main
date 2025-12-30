@@ -55,7 +55,7 @@ local PlayerGui = Player.PlayerGui
 -----------------------------------------------
 ---- 🔑 KEY SYSTEM 🔑
 -----------------------------------------------
-function self.MakeKeyPopup(): BindableEvent
+function self.MakeKeyPopup()
     local keyendevent = Instance.new("BindableEvent")
 	local JunkieKeySystem = loadstring(game:HttpGet("https://junkie-development.de/sdk/JunkieKeySystem.lua"))()
 
