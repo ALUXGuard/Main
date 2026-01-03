@@ -28,6 +28,7 @@ type Setting = {
     SelectRaceHost:         string,
     SelectIsland:           number,
     FarmMethod:             string,
+    DodgeMethod:            string,
     TweenSpeed:             number,
     YPos:                   number,
     TeleportAtDistance:     number,
@@ -56,18 +57,21 @@ local PlayerGui = Player.PlayerGui
 ---- 🔑 KEY SYSTEM 🔑
 -----------------------------------------------
 function self.MakeKeyPopup()
-    local keyendevent = Instance.new("BindableEvent")
 	local JunkieKeySystem = loadstring(game:HttpGet("https://junkie-development.de/sdk/JunkieKeySystem.lua"))()
 
 	local API_KEY = "2383bf96-9085-4015-b6f9-476b19ffe24d"
 	local SERVICE = "GenKey"
 	local PROVIDER = "GetKey"
 
-    if not isfile("Apex Hub Script/Key.txt") then
-        writefile("Apex Hub Script/Key.txt", "")
+    if not isfile("Apex Hub Script") then
+        makefolder("Apex Hub Script")
+
+        if not isfile("Apex Hub Script/Key.txt") then
+            writefile("Apex Hub Script/Key.txt", "")
+        end
     end
 
-    if JunkieKeySystem.verifyKey(API_KEY, readfile("Apex Hub Script/Key.txt"), SERVICE) then
+    if JunkieKeySystem.verifyKey(API_KEY, readfile("Apex Hub Script/Key.txt"), SERVICE) == true then
         return
     end
 
@@ -261,7 +265,9 @@ function self.MakeKeyPopup()
 	Dropshadow.ScaleType = Enum.ScaleType.Slice
 	Dropshadow.SliceCenter = Rect.new(28, 26, 96, 94)
 
+    local keyendevent = Instance.new("BindableEvent")
 	local connects = {}
+
 	local function EndPopupKey()
         KeyPopup:Destroy()
 
@@ -278,8 +284,8 @@ function self.MakeKeyPopup()
 	local checkcon = CheckKey.MouseButton1Click:Connect(function()
         local key = TextBox.Text
 		local isValid = JunkieKeySystem.verifyKey(API_KEY, key, SERVICE)
-		
-		if isValid then
+
+		if isValid == true then
             writefile("Apex Hub Script/Key.txt", key)
             EndPopupKey()
             keyendevent:Fire()
@@ -288,7 +294,7 @@ function self.MakeKeyPopup()
 
 	local exitcon = Exit.MouseButton1Click:Connect(function()
 		EndPopupKey()
-		
+
 		keyendevent:Fire("Close")
 	end)
 
@@ -297,6 +303,8 @@ function self.MakeKeyPopup()
 	table.insert(connects, exitcon)
 
     local keyresponse = keyendevent.Event:Wait()
+    keyendevent:Destroy()
+
     return keyresponse
 end
 
@@ -495,8 +503,8 @@ function self.PullLever()
     local temple_of_time = workspace.Map:FindFirstChild("Temple of Time")
     local lever_prompt = temple_of_time and temple_of_time.Lever.Prompt:FindFirstChild("ProximityPrompt")
 
-    if lever_prompt then
-        fireproximityprompt(workspace.Map["Temple of Time"].Lever.Prompt.ProximityPrompt)
+    if lever_prompt and lever_prompt.Enabled then
+        fireproximityprompt(lever_prompt)
     end
 
     if temple_of_time and not lever_prompt then
@@ -691,7 +699,7 @@ function self.BringMon(closetmon: Instance)
     local monPositions = {}
     local mons = {}
 
-    local function SetPlayerCollision(mon: Model, cancollide: boolean)
+    local function SetMonCollision(mon: Model, cancollide: boolean)
         mon.LowerTorso.CanCollide = cancollide
         mon.UpperTorso.CanCollide = cancollide
         mon.HumanoidRootPart.CanCollide = cancollide
@@ -711,6 +719,9 @@ function self.BringMon(closetmon: Instance)
     local function CheckChildren(path)
         for _, mon in path:GetChildren() do
             local hum = mon:FindFirstChild("Humanoid")
+            local distance = (mon:GetPivot().Position - Player.Character.HumanoidRootPart.Position).Magnitude
+
+            if distance > 250 then continue end
 
             if (mon.Name:match("^(.-)%s*%[") or mon.Name) == closetmon.name and hum and hum.Health > 0 then
                 table.insert(monPositions, mon.HumanoidRootPart.Position)
@@ -718,7 +729,7 @@ function self.BringMon(closetmon: Instance)
 
                 hum.WalkSpeed = 0
 
-                pcall(SetPlayerCollision, mon, false)
+                pcall(SetMonCollision, mon, false)
             end
         end
     end
@@ -726,7 +737,7 @@ function self.BringMon(closetmon: Instance)
     CheckChildren(workspace.Enemies)
     CheckChildren(workspace._WorldOrigin.EnemySpawns)
 
-    if #monPositions == 0 then return closetmon:GetPivot().Position end
+    if #monPositions <= 1 then return closetmon:GetPivot().Position end
 
     local middlePos = getMiddleVector3(monPositions)
 
@@ -1050,6 +1061,30 @@ function self.ReStats()
     self.CommF_:InvokeServer("BlackbeardReward", "Refund", "2")
 end
 
+function self.GetDodgeOffset(target: Model)
+    local offset = Vector3.zero
+
+    local offsets = {
+        Vector3.new(self.Settings.YPos, 0, self.Settings.YPos),
+        Vector3.new(self.Settings.YPos, 0, -self.Settings.YPos),
+        Vector3.new(-self.Settings.YPos, 0, self.Settings.YPos),
+        Vector3.new(-self.Settings.YPos, 0, self.Settings.YPos),
+    }
+
+    -- circle
+    local radius = self.Settings.YPos
+
+    if self.Settings.DodgeMethod == "Circle" then
+        offset = (target:GetPivot() * CFrame.Angles(0, self._StepC, 0) * CFrame.new(radius, 0, 0)).Position - target:GetPivot().Position
+        offset = Vector3.new(offset.X, 0, offset.Z)
+
+    elseif self.Settings.DodgeMethod == "Square" then
+        offset = offsets[self._StepSq]
+    end
+
+    return offset
+end
+
 -----------------------------------------------
 ---- ⭐ PRIORITY FUNCTIONS ⭐
 -----------------------------------------------
@@ -1173,8 +1208,9 @@ function PriorityFunctions.AutoFarm()
 
             if closet_mon then
                 local middlepos = self.BringMon(closet_mon)
+                local offset = self.GetDodgeOffset(closet_mon)
 
-                self.Fly(middlepos + Vector3.new(0, self.Settings.YPos, 0))
+                self.Fly(middlepos + Vector3.new(0, self.Settings.YPos, 0) + offset)
             else
                 self.Fly(hrp.Position)
             end
@@ -1630,6 +1666,24 @@ function AutomationFunctions.UpdateQuestDatas()
     end
 end
 
+function AutomationFunctions.UpdateOffsetStep()
+    if not self._LastStepSqUpdate then self._LastStepSqUpdate = 0 end
+
+    if not self._StepC then self._StepC = 0 end
+    if not self._StepSq then self._StepSq = 1 end
+
+    self._StepC += math.rad(3)
+
+    if tick() - self._LastStepSqUpdate < 1 then return end
+    self._LastStepSqUpdate = tick()
+
+    self._StepSq += 1
+
+    if self._StepSq > 4 then
+        self._StepSq = 1
+    end
+end
+
 -----------------------------------------------
 ---- 🔰 INIT 🔰
 -----------------------------------------------
@@ -1663,7 +1717,7 @@ do
 
     local function titledRow(parent: any, title: string, subtitle: string?) -- You can use this to automate the process of creating similar rows.
         local row = parent:Row({SearchIndex = title})
-        
+
         row:Left():TitleStack({Title = title, Subtitle = subtitle})
 
         return row
@@ -1722,6 +1776,19 @@ do
                         })
                     end
 
+                    do -- dodge method
+                        local dodge_method =  {"None", "Circle", "Square"}
+
+                        local row = titledRow(form, "Dodge Method", "select auto dodge method.")
+                        local popUpButton = row:Right():PopUpButton({
+                            Options = dodge_method,
+                            Value = self.Settings.DodgeMethod and table.find(dodge_method, self.Settings.DodgeMethod) or 1,
+                            ValueChanged = function(_self, value: number)
+                                self.Settings.DodgeMethod = _self.Options[value]
+                            end,
+                        })
+                    end
+
                     do -- auto attack
                         local row = titledRow(
                             form,
@@ -1743,8 +1810,8 @@ do
                             "Tween Speed",
                             "change how fast you fly."
                         )
-                        
-                        local lb = row:Right():Label({Text = math.round(self.Settings.TweenSpeed) or 3})
+
+                        local lb = row:Right():Label({Text = math.round(self.Settings.TweenSpeed or 3)})
 
                         row:Right():Slider({
                             Value = self.Settings.TweenSpeed and self.Settings.TweenSpeed/10 or 0.3,
@@ -1762,7 +1829,7 @@ do
                             "farm y distance."
                         )
 
-                        local lb = row:Right():Label({Text = math.round(self.Settings.YPos) or 15})
+                        local lb = row:Right():Label({Text = math.round(self.Settings.YPos or 15)})
 
                         row:Right():Slider({
                             Value = self.Settings.YPos and self.Settings.YPos/30 or 0.5,
@@ -1780,7 +1847,7 @@ do
                             "teleport when distance lower than this."
                         )
 
-                        local lb = row:Right():Label({Text = math.round(self.Settings.TeleportAtDistance) or 200})
+                        local lb = row:Right():Label({Text = math.round(self.Settings.TeleportAtDistance or 200)})
 
                         row:Right():Slider({
                             Value = self.Settings.TeleportAtDistance and self.Settings.TeleportAtDistance/500 or 0.4,
