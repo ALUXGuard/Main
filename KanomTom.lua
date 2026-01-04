@@ -775,6 +775,8 @@ function AutomationFunctions.AutoStats()
     local select_stat_values = {}
     local point = self.GetData().StatPoint
 
+    print(point)
+
     for _, stat in Player.Stat:GetChildren() do
         if table.find(self.Settings.SelectedStats, stat.Name) then
             table.insert(select_stat_values, {Stat = stat.Name, Level = stat.Value})
@@ -786,7 +788,7 @@ function AutomationFunctions.AutoStats()
     end)
 
     if point > 0 and select_stat_values[1] then
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({{select_stat_values[1].Stat, 1}, utf8.char(3)})
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({{select_stat_values[1].Stat, 1}, "\v"})
     end
 end
 
