@@ -39,12 +39,12 @@ function self.MakeKeyPopup()
     if not isfile("Apex Hub Script") then
         makefolder("Apex Hub Script")
 
-        if not isfile(`Apex Hub Script/{Game} Key.txt`) then
-            writefile(`Apex Hub Script/{Game} Key.txt`, "")
+        if not isfile("Apex Hub Script/Key.txt") then
+            writefile("Apex Hub Script/Key.txt", "")
         end
     end
 
-    if JunkieKeySystem.verifyKey(API_KEY, readfile(`Apex Hub Script/{Game} Key.txt`), SERVICE) == true then
+    if JunkieKeySystem.verifyKey(API_KEY, readfile("Apex Hub Script/Key.txt"), SERVICE) == true then
         return
     end
 
@@ -259,7 +259,7 @@ function self.MakeKeyPopup()
 		local isValid = JunkieKeySystem.verifyKey(API_KEY, key, SERVICE)
 
 		if isValid == true then
-            writefile(`Apex Hub Script/{Game} Key.txt`, key)
+            writefile("Apex Hub Script/Key.txt", key)
             EndPopupKey()
             keyendevent:Fire()
         end
@@ -1126,7 +1126,7 @@ do
                 do -- Weapon Form
                     local form = tab:PageSection({Title = "Weapon"}):Form()
 
-                    titledRow(form, "Auto Buy Best Weapon"):Right():Toggle({Value = self.Settings.AutoBestWeapon or false, ValueChanged = function(_self, value: boolean) self.Settings.AutoBestWeapon = value end})
+                    titledRow(form, "Auto Buy/Craft Best Weapon"):Right():Toggle({Value = self.Settings.AutoBestWeapon or false, ValueChanged = function(_self, value: boolean) self.Settings.AutoBestWeapon = value end})
                 end
             end
 
