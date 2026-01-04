@@ -730,6 +730,7 @@ function AutomationFunctions.SaveSetting()
 
     makefolder("Apex Hub Script")
     makefolder("Apex Hub Script/Settings")
+    writefile(`Apex Hub Script/Settings/{Game}.json`, "")
     writefile(`Apex Hub Script/Settings/{Game}.json`, http:JSONEncode(self.Settings))
 end
 
@@ -1018,7 +1019,8 @@ do
                             Maximum = #boss,
                             Value = {},
                             ValueChanged = function(_self, value)
-                                if popup_loaded then self.Settings.SelectedBosses = {} end
+                                if not popup_loaded then return end
+                                self.Settings.SelectedBosses = {}
 
                                 for _, v in value do
                                     table.insert(self.Settings.SelectedBosses, _self.Options[v])
@@ -1032,8 +1034,18 @@ do
                             self.Settings.SelectedBosses = {}
                         end
 
+                        local exist_values = {}
+
                         for _, v in self.Settings.SelectedBosses do
-                            table.insert(selected_bosses, table.find(popUpButton.Options, v))
+                            if not table.find(exist_values, v) then
+                                table.insert(exist_values, v)
+                            end
+                        end
+
+                        self.Settings.SelectedBosses = exist_values
+
+                        for _, v in boss do
+                            table.insert(selected_bosses, table.find(self.Settings.SelectedBosses, v))
                         end
 
                         popUpButton.Value = selected_bosses
@@ -1051,13 +1063,15 @@ do
                     do -- auto stats
                         local popup_loaded = false
                         local row = titledRow(form, "Auto Stats", "auto up selected stats.")
+                        local stats = {"Damage", "Durability", "Stamina", "Speed"}
 
                         local popUpButton = row:Right():PopUpButton({
-                            Options = {"Damage", "Durability", "Stamina", "Speed"},
+                            Options = stats,
                             Maximum = 4,
                             Value = {},
                             ValueChanged = function(_self, value)
-                                if popup_loaded then self.Settings.SelectedStats = {} end
+                                if not popup_loaded then return end
+                                self.Settings.SelectedStats = {}
 
                                 for _, v in value do
                                     table.insert(self.Settings.SelectedStats, _self.Options[v])
@@ -1071,8 +1085,18 @@ do
                             self.Settings.SelectedStats = {}
                         end
 
+                        local exist_values = {}
+
                         for _, v in self.Settings.SelectedStats do
-                            table.insert(selected_stats, table.find(popUpButton.Options, v))
+                            if not table.find(exist_values, v) then
+                                table.insert(exist_values, v)
+                            end
+                        end
+
+                        self.Settings.SelectedStats = exist_values
+
+                        for _, v in stats do
+                            table.insert(selected_stats, table.find(self.Settings.SelectedStats, v))
                         end
 
                         popUpButton.Value = selected_stats
