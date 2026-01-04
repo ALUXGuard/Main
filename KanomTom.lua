@@ -404,7 +404,7 @@ function self.InitComponent()
                     end
                 elseif debug.info(v, "s"):match(".Modules.Client.TalkNpc.Weapon") then
                     for _, j in getupvalues(v) do
-                        if typeof(j) == "Instance" and j.ClassName == "RemoteEvent" then
+                        if typeof(j) == "Instance" and j.ClassName == "RemoteFunction" then
                             self.ShopRE = j
                         end
                     end
@@ -823,7 +823,7 @@ function AutomationFunctions.AutoBestWeapon()
         end
 
         if has_all_materials or data.Yen >= weapon.Yen then
-            self.ShopRE:FireServer("Buy", weapon.Name)
+            self.ShopRE:InvokeServer("Buy", weapon.Name)
 
             break
         end
