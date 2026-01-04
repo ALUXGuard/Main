@@ -645,7 +645,7 @@ function PriorityFunctions.AutoFarm()
     self.PriorityFarming = true
 
     if self.Settings.FarmMethod == "Level" then
-        local questgui = game:GetService("Players")["0nonwit0"].PlayerGui.HUD:FindFirstChild("Quest")
+        local questgui = PlayerGui.HUD:FindFirstChild("Quest")
         local current_quest = questgui and questgui.QuestInfo.Text
         local proper_quest = self.GetProperQuest()
         local quest_info = require(proper_quest.Path)
