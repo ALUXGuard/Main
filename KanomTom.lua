@@ -388,7 +388,7 @@ function self.InitComponent()
     local init_functions = {}
 
     function init_functions.GetRemotes()
-        for _, v in getgc(true) do
+        for _, v in getgc() do
             if type(v) == "function" then
                 if debug.info(v, "s"):match(".Modules.Client.Game.Quest") then
                     for _, j in getupvalues(v) do
@@ -607,7 +607,7 @@ function self.GetData()
 end
 
 function self.IsWeaponEquip()
-    return Player.Character.Weapon:FindFirstChildOfClass("Model"):FindFirstChildOfClass("MeshPart").Transparency == 0
+    return Player.Character.Weapon:FindFirstChildOfClass("Model"):FindFirstChildOfClass("MeshPart").Transparency ~= 1
 end
 
 function self.EquipWeapon()
@@ -624,7 +624,7 @@ function self.Attack()
     if tick() - self._LastAttack < 0.1 then return end
     self._LastAttack = tick()
 
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({"NormalAttack", utf8.char(2)})
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({"NormalAttack", "\002"})
 end
 
 function self.TpToPlayer()
