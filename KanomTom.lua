@@ -661,7 +661,7 @@ function PriorityFunctions.AutoFarm()
                 local monhrp = closet_mon.HumanoidRootPart
                 local monpos = monhrp.Position
 
-                Player.Character:PivotTo(CFrame.lookAt(Vector3.new(monpos.X, -3, monpos.Z), monpos))
+                Player.Character:PivotTo(CFrame.lookAt(Vector3.new(monpos.X, -4, monpos.Z), monpos))
                 Player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
 
                 self.EquipWeapon()
