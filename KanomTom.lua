@@ -4,6 +4,9 @@ type Setting = {
     AutoAttack:             boolean,
     AutoStats:              boolean,
     AutoBoss:               boolean,
+    AutoGiftBox:            boolean,
+    AutoBestWeapon:         boolean,
+    AutoEnablePvp:          boolean,
 
     -- data
     PriorityFarming:        boolean,
@@ -366,22 +369,25 @@ end
 function self.InitTeam()
     for _, v in workspace:GetChildren() do
         local Selection = v:FindFirstChild("Selection")
-        
+
         if Selection then
-            for i = 1, 5 do
-                local pos = workspace.CurrentCamera:WorldToViewportPoint(Selection.GHOUL.Meat.Position)
+            local meat = Selection.GHOUL.Meat
+
+            repeat
+                local pos = workspace.CurrentCamera:WorldToViewportPoint(meat.Position)
                 game:GetService("VirtualInputManager"):SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
                 game:GetService("VirtualInputManager"):SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-                
-                task.wait(0.2)
-            end
+
+                task.wait(0.1)
+            until not Selection or not Selection.Parent or not meat or not meat.Parent
         end
     end
 end
 
 function self.InitComponent()
-    -- quest remote
-    local function GetRemotes()
+    local init_functions = {}
+
+    function init_functions.GetRemotes()
         for _, v in getgc(true) do
             if type(v) == "function" then
                 if debug.info(v, "s"):match(".Modules.Client.Game.Quest") then
@@ -396,18 +402,28 @@ function self.InitComponent()
                             self.PvptRF = j
                         end
                     end
+                elseif debug.info(v, "s"):match(".Modules.Client.TalkNpc.Weapon") then
+                    for _, j in getupvalues(v) do
+                        if typeof(j) == "Instance" and j.ClassName == "RemoteEvent" then
+                            self.ShopRE = j
+                        end
+                    end
                 end
             end
         end
 
-        local questRE = game:GetService("ReplicatedStorage"):WaitForChild("Network"):FindFirstChild("Quest")
-        local pvpRF = game:GetService("ReplicatedStorage"):WaitForChild("Network"):FindFirstChild("Pvp Toggle")
+        local function FindNetwork(name, rname)
+            local r = game:GetService("ReplicatedStorage"):WaitForChild("Network"):FindFirstChild(rname)
 
-        if questRE then self.QuestRE = questRE end
-        if pvpRF then self.PvptRF = pvpRF end
+            if r then self[name] = r end
+        end
+
+        FindNetwork("QuestRE", "Quest")
+        FindNetwork("PvptRF", "Pvp Toggle")
+        FindNetwork("ShopRE", "WeaponShop")
     end
 
-    local function GetQuestModules()
+    function init_functions.GetQuestModules()
         self.quest_modules = {}
 
         for _, v in game:GetService("ReplicatedStorage").Modules.Client.TalkNpc.Quests:GetChildren() do
@@ -420,8 +436,38 @@ function self.InitComponent()
         end
     end
 
-    GetRemotes()
-    GetQuestModules()
+    function init_functions.GetDatas()
+        self.Data = {}
+
+        for _, v in require(game:GetService("ReplicatedStorage").ReplicaController)._replicas do
+            self.Data.CCG = v.Data.CCG
+            self.Data.GHOUL = v.Data.GHOUL
+        end
+    end
+
+    function init_functions.WeaponData()
+        self.Weapons = {}
+        self.Weapons.CCG = {}
+        self.Weapons.GHOUL = {}
+
+        local function InsertData(team: string)
+            for _, weapon_m in game:GetService("ReplicatedStorage").Modules.DataBase.Weapons[team]:GetChildren() do
+                local requirement = require(weapon_m).Buy
+                table.insert(self.Weapons[team], {Name = weapon_m.Name, Materials = requirement.Materials, Yen = requirement.Yen})
+            end
+
+            table.sort(self.Weapons[team], function(a, b)
+                return a.Yen > b.Yen
+            end)
+        end
+        
+        InsertData("CCG")
+        InsertData("GHOUL")
+    end
+
+    for _, func in init_functions do
+        func()
+    end
 end
 
 -----------------------------------------------
@@ -531,13 +577,13 @@ function self.GetClosetMon(monnames: {string})
     end
 
     CheckChildren(workspace["AI/Player"])
-    CheckChildren(workspace["AI/Player"].Boss)
+    CheckChildren(workspace["AI/Player"].Boss, true)
 
     return closetmon
 end
 
 function self.GetProperQuest()
-    local plr_lv = Player.Data.Level.Value
+    local plr_lv = self.GetData().Level
     local proper_quest
 
     for _, v in self.quest_modules do
@@ -549,37 +595,15 @@ function self.GetProperQuest()
     return proper_quest
 end
 
-function self.GetCurrentQuest()
-    if not self._LastGetCurrentQuest then
-        self._LastGetCurrentQuest = 0
-    end
-
-    if tick() - self._LastGetCurrentQuest < 1 then return self._CurrentQuest end
-    self._LastGetCurrentQuest = tick()
-
-    for _, v in getgc(true) do
-        if type(v) == "function" then
-            if debug.info(v, "s"):match(".Modules.Client.Game.Quest") and getfunctionhash(v) == "a75343cae3b355101ce8094ee80fb35a03f0d4bf127ff9d672874607e69d43daa205b772bf6b67959aa653ada92d253f" then
-                for _, j in getupvalues(v) do
-                    if type(j) == "table" and type(j[1]) ~= "userdata" then
-                        for k, s in j do
-                            for x, y in s do
-                                self._CurrentQuest = s
-                                return self._CurrentQuest
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-function self.GetQuest()
+function self.GetQuest(questPath: ModuleScript?)
     if not self.QuestRE then return end
 
     self.QuestRE:FireServer("RemoveQuest")
-    self.QuestRE:FireServer("RequestQuest", self.GetProperQuest().Path)
+    self.QuestRE:FireServer("RequestQuest", questPath)
+end
+
+function self.GetData()
+    return self.Data[Player:GetAttribute("Team")]
 end
 
 function self.IsWeaponEquip()
@@ -600,7 +624,7 @@ function self.Attack()
     if tick() - self._LastAttack < 0.1 then return end
     self._LastAttack = tick()
 
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({"NormalAttack", "	"})
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({"NormalAttack", utf8.char(2)})
 end
 
 function self.TpToPlayer()
@@ -621,26 +645,29 @@ function PriorityFunctions.AutoFarm()
     self.PriorityFarming = true
 
     if self.Settings.FarmMethod == "Level" then
-        local current_quest = self.GetCurrentQuest()
+        local questgui = game:GetService("Players")["0nonwit0"].PlayerGui.HUD:FindFirstChild("Quest")
+        local current_quest = questgui and questgui.QuestInfo.Text
+        local proper_quest = self.GetProperQuest()
+        local quest_info = require(proper_quest.Path)
 
-        if (not current_quest or current_quest.LevelRequired ~= self.GetProperQuest().Min) or not Player.PlayerGui:WaitForChild("HUD"):FindFirstChild("Quest") then
-            self.GetQuest()
+        if not questgui or current_quest ~= quest_info.QuestInfo or not Player.PlayerGui:WaitForChild("HUD"):FindFirstChild("Quest") then
+            self.GetQuest(proper_quest.Path)
             task.wait(0.1)
 
         else
-            local closet_mon = self.GetClosetMon(current_quest.Target)
+            local closet_mon = self.GetClosetMon(quest_info.Target)
 
             if closet_mon then
                 local monhrp = closet_mon.HumanoidRootPart
                 local monpos = monhrp.Position
 
-                Player.Character:PivotTo(CFrame.lookAt(monpos + Vector3.new(0, -(self.Settings.YPos or 8), 0), monpos))
+                Player.Character:PivotTo(CFrame.lookAt(Vector3.new(monpos.X, -3, monpos.Z), monpos))
                 Player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
 
                 self.EquipWeapon()
             else
-                local plr_pos = Player.Character.HumanoidRootPart.Position
-                self.Fly(Vector3.new(plr_pos.X, -5, plr_pos.Z))
+                Player.Character:PivotTo(CFrame.new(167.10682678222656, -81.2939224243164, 174.18553161621094))
+                Player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
             end
         end
 
@@ -650,18 +677,39 @@ function PriorityFunctions.AutoFarm()
 end
 
 function PriorityFunctions.AutoBoss()
-    local closet_boss = self.GetClosetMon(self.Settings.SelectedBosses)
+    if not self._LastBossCheck then
+        self._LastBossCheck = 0
+    end
 
-    if closet_boss then
+    local closet_boss
+
+    if tick() - self._LastBossCheck < 2 then
+        closet_boss = self._LastGetClosetBoss
+    else
+        closet_boss = self.GetClosetMon(self.Settings.SelectedBosses)
+        self._LastGetClosetBoss = closet_boss
+    end
+
+    self._LastBossCheck = tick()
+
+    if closet_boss and closet_boss:FindFirstChild("HumanoidRootPart") then
         self.PriorityFarming = true
 
         local monhrp = closet_boss.HumanoidRootPart
         local monpos = monhrp.Position
 
-        Player.Character:PivotTo(CFrame.lookAt(monpos + Vector3.new(0, -(self.Settings.YPos or 10), 0), monpos))
+        Player.Character:PivotTo(CFrame.lookAt(Vector3.new(monpos.X, -5, monpos.Z), monpos))
         Player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
 
         self.EquipWeapon()
+    end
+end
+
+function PriorityFunctions.AutoGiftBox()
+    for _,v in workspace:GetChildren() do
+        if v.Name == "Gift box" then
+            Player.Character:PivotTo(v:GetPivot())
+        end
     end
 end
 
@@ -724,8 +772,7 @@ end
 
 function AutomationFunctions.AutoStats()
     local select_stat_values = {}
-    local point = PlayerGui.Menu.MenuFrames.Stats["Remain Point"].Point.Text:gsub("Remain Point%(s%): ", "")
-    point = tonumber(point)
+    local point = self.GetData().StatPoint
 
     for _, stat in Player.Stat:GetChildren() do
         if table.find(self.Settings.SelectedStats, stat.Name) then
@@ -748,6 +795,39 @@ function AutomationFunctions.AutoEnablePvp()
     end
 end
 
+function AutomationFunctions.AutoBestWeapon()
+    if not self._LastBestWeaponCheck then
+        self._LastBestWeaponCheck = 0
+    end
+
+    if tick() - self._LastBestWeaponCheck < 3 then return end
+    self._LastBestWeaponCheck = tick()
+
+    local team = Player:GetAttribute("Team")
+    local data = self.GetData()
+    local onsale_weapons = game:GetService("ReplicatedStorage").GameInfo.WeaponInShop[team]
+
+    for _, weapon in self.Weapons[team] do
+        local has_all_materials = true
+
+        if weapon.Name == data.Weapon then return end
+        if not onsale_weapons:FindFirstChild(weapon.Name) then continue end
+
+        for mat_name, mat_amount in weapon.Materials do
+            if not data.Inventory[mat_name] or data.Inventory[mat_name] < mat_amount then
+                has_all_materials = false
+
+                break
+            end
+        end
+
+        if has_all_materials or data.Yen >= weapon.Yen then
+            self.ShopRE:FireServer("Buy", weapon.Name)
+
+            break
+        end
+    end
+end
 
 -----------------------------------------------
 ---- 🔰 INIT 🔰
@@ -780,7 +860,7 @@ do
                 window.Minimized = not window.Minimized
             end
         end)
-        
+
         self.CloseConnect = window.Destroying:Connect(function() if getgenv().CleanUpApexHub then getgenv().CleanUpApexHub() end end)
 
         -- set sidebar size
@@ -791,7 +871,7 @@ do
 
         local function titledRow(parent: any, title: string, subtitle: string?) -- row create function
             local row = parent:Row({SearchIndex = title})
-            
+
             row:Left():TitleStack({Title = title, Subtitle = subtitle})
 
             return row
@@ -923,7 +1003,10 @@ do
                 do -- Auto Farm Form
                     local form = tab:PageSection({Title = "Farm"}):Form()
 
-                    titledRow(form, "Auto Farm"):Right():Toggle({Value = self.Settings.AutoFarm or false, ValueChanged = function(_self, value: boolean) self.Settings.AutoFarm = value if not value then self.Fly() end end})
+                    local function autofarm(_self, value: boolean) self.Settings.AutoFarm = value if not value then local pos = Player.Character:GetPivot().Position if pos.Y < 3.5 then Player.Character:PivotTo(CFrame.new(pos.X, 3.5, pos.Z)) end end end
+
+                    titledRow(form, "Auto Farm"):Right():Toggle({Value = self.Settings.AutoFarm or false, ValueChanged = autofarm})
+                    titledRow(form, "Auto Collect Gift Box"):Right():Toggle({Value = self.Settings.AutoGiftBox or false, ValueChanged = function(_self, value: boolean) self.Settings.AutoGiftBox = value end})
 
                     do -- auto boss
                         local popup_loaded = false
@@ -1007,6 +1090,22 @@ do
 
             end
 
+            do -- Weapon tab
+                local tab = section:Tab({Selected = false, Title = "Weapon", Icon = "rbxassetid://10455604811"})
+
+                do -- Shop Form
+                    local form = tab:PageSection({Title = "Shop"}):Form()
+
+                    titledRow(form, "Open Shop"):Right():Button({Label = "  >  ", State = "Primary", Pushed = function(_self) require(game:GetService("ReplicatedStorage").Modules.Client.TalkNpc.Weapon)()[1].Answers[1].OnChosen() end})
+                end
+
+                do -- Weapon Form
+                    local form = tab:PageSection({Title = "Weapon"}):Form()
+
+                    titledRow(form, "Auto Buy Best Weapon"):Right():Toggle({Value = self.Settings.AutoBestWeapon or false, ValueChanged = function(_self, value: boolean) self.Settings.AutoBestWeapon = value end})
+                end
+            end
+
             do -- Player tab
                 local tab = section:Tab({Selected = false, Title = "Players", Icon = "rbxassetid://16781409545"})
 
@@ -1056,8 +1155,8 @@ do
                 do -- Team Form
                     local form = tab:PageSection({Title = "Team"}):Form()
 
-                    titledRow(form, "Ghoul"):Right():Button({Label = "  >  ", State = "Primary", Pushed = function(_self) game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack({{{"\001", "'\188\214\155\005\223A\251\132\216\153\231\017\129\167#", "GHOUL"}, "\r"}})) end})
-                    titledRow(form, "CCG"):Right():Button({Label = "  >  ", State = "Primary", Pushed = function(_self) game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack({{{"\001", "'\188\214\155\005\223A\251\132\216\153\231\017\129\167#", "CCG"}, "\r"}})) end})
+                    titledRow(form, "Ghoul"):Right():Button({Label = "  >  ", State = "Primary", Pushed = function(_self) game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer({{"\001", "Y\175e<P<F\a\141Y@\031\227\228)\253", "GHOUL"}, "\b"}) end}) 
+                    titledRow(form, "CCG"):Right():Button({Label = "  >  ", State = "Primary", Pushed = function(_self) game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer({{"\001", "Y\175e<P<F\a\141Y@\031\227\228)\253", "CCG"}, "\b"}) end})
                 end
             end
 
@@ -1220,6 +1319,5 @@ getgenv().CleanUpApexHub = function()
         end
     end
 
-    self.Fly()
     pcall(function() self.app:Destroy() end)
 end
