@@ -873,7 +873,7 @@ end
 
 local function GetCreate()
     local typeof = game and typeof
-    local Instance = game and Instance or
+    local Instance = game and Instance
 
     local defaults = GetDefault()
     local apply = GetApply()
@@ -1429,7 +1429,7 @@ local function GetIndexes()
     local branch = GetBranch()
     local source = GetSource()
     local effect = GetEffect()
-    local timeout = GetTimeout()()
+    local timeout = GetTimeOut()
 
     type Array<T> = { T }
     type Map<K, V> = { [K]: V }
@@ -1553,7 +1553,7 @@ local function GetValues()
     local branch = GetBranch()
     local source = GetSource()
     local effect = GetEffect()
-    local timeout = GetTimeout()()
+    local timeout = GetTimeOut()()
 
     type Array<T> = { T }
     type Map<K, V> = { [K]: V }
